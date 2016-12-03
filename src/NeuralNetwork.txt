@@ -1,0 +1,343 @@
+
+
+#include <iostream>
+#include <math.h>
+#include <cstdlib>
+#include <stdlib.h>
+#include <time.h>
+#include <fstream>
+#include <sstream>
+#include <cmath>
+
+using namespace std;
+
+//// for reading in files
+const int ROWS = 200;
+const int COLS = 7;
+const int BUFFSIZE = 10000;
+const int numSets = 1;//4;
+ifstream infile;
+ofstream outfile; //// for outgoing file
+
+//// for running each simulation
+int diagnostic = 0; // print out in terminal? (1/0)
+int epoch = 5; // for training the net
+int nn = 3; // number of nodes
+int nx = 5; // number of inputs
+int ny = 2; // number of outputs
+float tf = 1; // training factor
+
+int guess,answer,guessRight;
+/////////////////////////////////////////////////////////
+//*****************************************************//
+/////// Start Main //////////////////////////////////////
+//*****************************************************//
+/////////////////////////////////////////////////////////
+
+int main(int argc, char** argv){
+  ///////////////////////////////////////////////////////////
+  ////////// Initialize Net /////////////////////////////////
+  ///////////////////////////////////////////////////////////
+  double x[nx]; // set inputs
+  double trainingValue[ny];
+  double w[nn][nx]; //weights layer 1 
+  double v[ny][nn]; // weights layer 2
+  double wb[nn]; // weight for node bias
+  double vb[ny];// weights for node bias 2
+  double delta[ny]; // used for back prop
+
+  for(int i=0;i<nn;i++){
+    wb[i] = rand() % 100;
+    wb[i] = wb[i]/100;
+  }
+  for(int i=0;i<nn;i++){
+    for(int j=0;j<nx;j++){
+      w[i][j] = rand() % 100;
+      w[i][j] = w[i][j]/100;
+    }
+  }
+  for(int i=0;i<ny;i++){
+    for(int j=0;j<nn;j++){
+      v[i][j] = rand() % 100;
+      v[i][j] = v[i][j]/100;
+    }
+  }
+  for(int i=0;i<ny;i++){
+    vb[i] = rand() % 100;
+    vb[i] = vb[i]/100;
+  }
+  if(diagnostic){ // begin diagnostic
+    cout << "wb prior: " << endl << "     ";
+    for(int i=0; i<nn;i++){
+      cout << wb[i] << " ";
+    }
+    cout << endl;
+    cout << "w prior: " << endl;
+    for(int i=0; i<nn; i++){
+      cout << "     ";
+      for(int j=0; j<nx; j++){
+        cout << w[i][j] << " ";
+      }
+      cout << endl;
+    }
+    cout << "vb prior: " << endl << "     ";
+    for(int i=0; i<ny;i++){
+      cout << vb[i] << " ";
+    }
+    cout << endl;
+    cout << "v prior: " << endl;
+    for(int i=0; i<ny; i++){
+      cout << "     ";
+      for(int j=0; j<nn; j++){
+        cout << v[i][j] << " ";
+      }
+      cout << endl;
+    }
+  } // end diagnostic
+  double mseOut[ny];
+  //////////////////////////////////////////////
+  /////////////// Begin Loop ///////////////////
+  //////////////////////////////////////////////
+  for(int foo=0; foo < epoch; foo++){ // start epoch
+    /////////////////////////////////////////////////////////
+    /////////////// Bring in Data ///////////////////////////
+    /////////////////////////////////////////////////////////
+    for(int set=0; set < numSets; set++){ // load sets in epoch
+      switch(set){ // switch to select data set
+        case 0:
+          infile.close();
+          infile.clear();
+          infile.open("train1.csv");
+          outfile.open("OutTrain1.csv");
+        break;
+        case 1:
+          infile.close();
+          infile.clear();
+          infile.open("test1.csv");
+          outfile.open("OutTest1.csv");
+        break;
+        case 2:
+          infile.close();
+          infile.clear();
+          infile.open("test2.csv");
+          outfile.open("OutTest2.csv");
+        break;
+        case 3:
+          infile.close();
+          infile.clear();
+          infile.open("test3.csv");
+          outfile.open("OutTest3.csv");
+        break;
+      } // end switch to select data set
+      double array[ROWS][COLS];
+      char buff[BUFFSIZE]; // a buffer to temporarily park the data
+      stringstream ss;
+      for( int row = 0; row < ROWS; ++row ) { // for each row of data set
+        infile.getline( buff,  BUFFSIZE ); //read a line into the buffer	
+        ss << buff; // copy the entire line into the stringstream
+        for( int col = 0; col < COLS; ++col ) {
+          ss.getline(buff,60,','); // read into buffer
+          array[row][col] = atof( buff ); // convert string to double and place in array
+        }
+        ss << ""; // copies an empty string into ss, erasing the previous contents
+        ss.clear(); // clears the 'eof' flag
+      } // end for each row in data set
+      infile.close();
+      if(diagnostic){
+        for( int row = 0; row < ROWS; ++row ) { // print the infile
+          for( int col = 0; col < COLS; ++col ) {
+            cout << array[row][col] << " ";
+          } // diagnostic
+          cout << endl;
+        } // diagnostic
+      } // end diagnostic
+      mseOut[0] = 0;
+      mseOut[1] = 0;
+      guessRight = 0; // reset correct guesses for each simulation
+      for(int fu=0;fu<ROWS;fu++){ //// Repeat for all training values
+        for(int i=0; i<nx;i++){ // load inputs
+          x[i] = array[fu][i];
+        } // end load inputs
+        for(int i=0; i<ny;i++){ // load training values (right answer)
+          trainingValue[i] = array[fu][i+5];
+        } // end load training values
+        if(1){ // begin diagnostic
+          cout << endl;
+          cout << endl << endl << "begin epoch: " << foo << endl;
+          cout << "Begin Set: " << set << endl;
+          cout << "Begin Row: " << fu << endl;
+          cout << "x: ";
+          for(int i=0;i<nx;i++){
+            cout << x[i] << " ";
+          }// diagnostic
+          cout << endl << "trainingValue: ";
+          for(int i=0;i<ny;i++){
+            cout << trainingValue[i] << " ";
+          }// diagnostic
+          cout << endl;
+        }// end diagnostic
+        double h[nn]; // matrix to hold the outputs of the first layer of nodes
+        for(int i=0;i<nn;i++){ // calc 1st set of weights in nn for each node
+          double sum = 0;
+          for(int j=0;j<nx;j++){ // calc 1st set of weights in nn for each input
+            if(0){ // diagnostic
+              cout << "i,j: " << i << "," << j << endl;
+              cout <<  "w: " << w[i][j] << endl;
+              cout <<  "x: " << x[j] << endl;
+              cout <<  "wb: " << wb[i] << endl; //checking under the hood
+            } // end diagnostic
+            sum = sum + w[i][j]*x[j]; // sum all edges coming into node
+          } // end for each input
+          sum = sum + wb[i]*1;
+          h[i] = 1/(1+exp(-sum)); // signoid function on summation
+          if(0){ // diagnostic
+            cout << "sum: " << sum << endl << endl;
+            cout << "h: " << h[i] << endl << endl;
+          } // end diagnostic
+        } // end for each node
+        double y[ny]; // output of the neural net
+        for(int i=0;i<ny;i++){ // calc 2nd layer of weights in neural net for all outputs
+          double sum = 0;
+          for(int j=0;j<nn;j++){ // calc 2nd layer of weights in neural net for all nodes
+            if(0){ // diagnostic
+              cout << "i,j: " << i << "," << j << endl;
+              cout <<  "v: " << v[i][j] << endl;
+              cout <<  "h: " << h[j] << endl;
+              cout <<  "vb: " << vb[i] << endl; //checking under the hood
+            } // end diagnostic
+            sum = sum + v[i][j]*h[j]; // sum all branches going into neural net
+          } // end for all nodes
+          sum = sum + vb[i]*1;
+          if(0){ // begin diagnostic
+            cout << "sum: " << sum << endl << endl; 
+          } // end diagnostic
+          y[i] = 1/(1+exp(-sum)); // signoid function on summation
+        } // end for all outputs
+        if(y[0] > y[1]){ // form guess of output
+          guess = 0;
+        } // end guess
+        else{ // more guess
+          guess = 1;
+        } // end guess again
+        answer = trainingValue[1]; //if 0 is 1, answer is 0
+        if(guess == answer){ // track correct guesses
+          guessRight++;
+        } // end guesses tracker
+        double e[ny];
+        for(int i=0;i<ny;i++){ // calculate error
+          e[i] = trainingValue[i] - y[i]; // calculate error
+          mseOut[i] = mseOut[i] + pow(e[i],2);
+        } // end calculate error
+        if(1){ // diagnostic
+          cout << "y: "; // print out y
+          for(int i=0;i<ny;i++){ // diagnostic
+            cout << " " << y[i];
+          } // diagnostic
+          cout << endl;
+          cout << "trainingValue: "; // printout error 
+          for(int i=0;i<ny;i++){ // diagnostic
+            cout << " " << trainingValue[i];
+          } // diagnostic
+          cout << endl;
+          cout << "error: "; // printout error 
+          for(int i=0;i<ny;i++){ // diagnostic
+            cout << " " << e[i];
+          } // diagnostic
+          cout << endl;
+          cout << endl;
+          //cout << "guess: " << guess << endl;
+          cout << "guessRight: " << guessRight << endl;
+        } // end diagnostic
+        ////////////////////////////////////////////
+        //////////////// Training //////////////////
+        ////////////////////////////////////////////
+        if(set ==0){ // dont train on tests
+          for(int i=0; i<ny; i++){ // correct output layer
+            delta[i] = e[i]*y[i]*(1-y[i]);
+          }  // end correct output layer
+          if(diagnostic==1){ // diagnostic
+            cout << "delta: " << endl;
+              for(int i=0; i<ny; i++){
+                cout << delta[i] << "   ";
+              } // diagnostic
+              cout << endl;
+          } // end diagnostic
+          float dSum[nn];
+          for(int j=0; j<nn;j++){ // get error for hidden layer
+            dSum[j] = 0;
+            for(int i=0; i<ny; i++){ // for each output
+              dSum[j] = dSum[j] + v[i][j]*delta[i];
+              if(0){ // diagnostic
+                cout << "dSum check:" << endl;
+                cout << "v[i][j]: " << v[i][j] << endl;
+                cout << "delta[i]: " << delta[i] << endl;
+                cout << "dSum[j]: " << dSum[j] << endl;
+              } // end diagnostic
+            } // for each output
+          } // end get error for hidden layer
+          if(diagnostic){ // diagnostic
+            cout << endl << "dSum: " << endl;
+            for(int i=0;i<nn;i++){ // diagnostic
+              cout << dSum[i] << "   ";
+            } // diagnostic
+            cout << endl;
+          } // end diagnostic
+          for(int i=0; i<ny; i++){ // correct output layer
+            for(int j=0; j<nn; j++){ // for each node
+              v[i][j] = v[i][j] + tf*delta[i]*h[j]; // change layer two weights
+              vb[i] = vb[i] + tf*delta[i];//*1; // change layer two bias weights
+            } // end for each node
+          } // end correct output layer
+          for(int i=0; i<nn; i++){ // correct first layer
+            for(int j=0; j<nx; j++){ // for each input
+                  w[i][j] = w[i][j] + tf*dSum[i]*h[i]*(1-h[i])*x[j]; //  change layer one weights
+                  wb[i] = wb[i] + tf*dSum[i]*h[i]*(1-h[i]);//*1; // change layer one bias weights
+            } // end for each input
+          } // end correct first layer
+          if(1){ // diagnostic
+            cout << "wb post: " << endl << "     ";
+            for(int i=0; i<nn;i++){
+              cout << wb[i] << " ";
+            } // diagnostic
+            cout << endl;
+            cout << "w post: " << endl;
+            for(int i=0; i<nn; i++){
+              cout << "     ";
+              for(int j=0; j<nx; j++){
+                cout << w[i][j] << " ";
+              } // diagnostic
+              cout << endl;
+            } // diagnostic
+            cout << "h: " << endl << "     ";
+            for(int i=0; i<nn; i++){
+              cout << h[i] << " ";
+            } // diagnostic
+            cout << endl;
+            cout << "v post: " << endl;
+            for(int i=0; i<ny; i++){
+              cout << "     ";
+              for(int j=0; j<nn; j++){
+                cout << v[i][j] << " ";
+              } // diagnostic
+              cout << endl;
+            } // diagnostic
+            cout << "vb post: "; // print out y
+            for(int i=0;i<ny;i++){
+              cout << " " << vb[i];
+            } // diagnostic
+            cout << endl << "y: "; // print out y
+            for(int i=0;i<ny;i++){
+              cout << " " << y[i];
+            } // diagnostic
+          } // end diagnostic
+        } // end training
+      } // for all rows in data set
+      cout << "epoch: " << foo << ", set: " << set << ", %: "  << (float) guessRight/ROWS << endl;
+      mseOut[0] = mseOut[0,foo]/ROWS;
+      mseOut[1] = mseOut[1,foo]/ROWS;
+      outfile << foo << "," << (float) guessRight/ROWS << "\n";
+    } // end evaluating data set
+    outfile.close();
+  } // for each epoch
+  return 0;
+} // end main
